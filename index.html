@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RevQuest — Révision Code Review WEB3</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===== TOPBAR ===== -->
+    <header class="topbar">
+      <div class="brand" data-nav="home">
+        <span class="logo">⚔️</span>
+        <span class="brand-name">RevQuest</span>
+      </div>
+      <div class="topbar-right">
+        <div class="stats">
+          <div class="stat" title="Série de jours consécutifs">🔥 <span id="streak">0</span></div>
+          <div class="stat" title="Niveau et XP">⭐ Nv <span id="level">1</span></div>
+          <div class="stat xpbar-wrap" title="Progression vers le niveau suivant">
+            <div class="xpbar"><div id="xpfill" class="xpfill"></div></div>
+            <span id="xptext" class="xptext">0 / 100 XP</span>
+          </div>
+        </div>
+        <div class="auth-bar" id="authBar"></div>
+      </div>
+    </header>
+
+    <main id="view"><!-- les vues sont injectées ici --></main>
+
+    <footer class="footer">
+      <span>RevQuest · révision active (rappel actif + répétition espacée) ·
+      <button class="linklike" id="resetBtn">réinitialiser ma progression</button></span>
+    </footer>
+  </div>
+
+  <!-- Données puis logique (scripts classiques pour fonctionner en double-clic / file://) -->
+  <script src="data.js"></script>
+  <script src="lessons.js"></script>
+  <script src="roadmap.js"></script>
+  <script src="auth.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

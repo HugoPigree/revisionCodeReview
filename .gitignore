@@ -1,0 +1,8 @@
+node_modules/
+server/node_modules/
+server/data.json
+server/revquest.db
+server/revquest.db-*
+*.log
+.DS_Store
+.claude/
