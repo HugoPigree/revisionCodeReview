@@ -133,15 +133,76 @@ main#view { flex: 1; max-width: 980px; width: 100%; margin: 0 auto; padding: 28p
 /* exercice guidé */
 .exo { margin-top: 20px; border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--bg-soft); }
 .exo-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--primary); margin-bottom: 8px; }
-.exo-enonce { margin: 0 0 12px; font-size: 14.5px; }
+.exo-enonce { margin: 0 0 12px; font-size: 14.5px; color: var(--text-dim); }
+.exo-probleme-wrap { margin-bottom: 12px; }
+.exo-probleme { margin: 0; padding: 12px 14px; background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.35); border-radius: 10px; font-size: 14.5px; line-height: 1.45; }
+.exo-part-bad { color: #f87171; }
+.exo-bad-wrap { margin-bottom: 14px; }
+.exo-bad { background: rgba(239,68,68,.06); border: 1px solid rgba(239,68,68,.4); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 0; }
+.exo-bad code { font-size: 13px; line-height: 1.55; white-space: pre; color: #fca5a5; }
+.exo-mission { background: rgba(91,140,255,.1); border: 1px solid rgba(91,140,255,.35); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.exo-mission-label { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--primary); margin-bottom: 6px; }
+.exo-mission p { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; }
+.exo-part-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); margin-bottom: 6px; }
+.exo-part-edit { color: var(--warn); margin-top: 4px; }
+.exo-starter-wrap { margin-bottom: 12px; }
+.exo-starter { background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 0; opacity: .85; }
+.exo-starter code { font-size: 13px; line-height: 1.55; white-space: pre; color: var(--text-dim); }
+.exo-tip { margin: 0 0 12px; font-size: 13px; color: var(--text-dim); font-style: italic; }
+.exo-guide { margin-top: 12px; background: rgba(91,140,255,.08); border-left: 3px solid var(--primary); border-radius: 8px; padding: 12px 14px 12px 16px; }
+.exo-guide.hidden { display: none; }
+.exo-guide-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--primary); margin-bottom: 8px; }
+.exo-guide ol { margin: 0; padding-left: 20px; font-size: 14px; }
+.exo-guide li { margin-bottom: 6px; }
+.exo-guide li strong { color: var(--primary); }
 .exo-code { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 0 0 12px; }
 .exo-code code, .exo-sol pre code { font-size: 13px; line-height: 1.55; white-space: pre; }
-.exo-editor { width: 100%; background: var(--bg); color: var(--text); border: 1.5px solid var(--border); border-radius: 8px;
-  padding: 14px; margin: 0 0 12px; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px;
-  line-height: 1.55; tab-size: 2; resize: vertical; white-space: pre; overflow-x: auto; }
-.exo-editor:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(91,140,255,.15); }
+.exo-editor-wrap { margin: 0 0 12px; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; }
+.exo-editor-wrap:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(91,140,255,.15); }
+.exo-editor { display: none; }
 .exo-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* CodeMirror — thème RevQuest */
+.cm-s-revquest.CodeMirror {
+  background: var(--bg); color: var(--text); font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px; line-height: 1.55; height: auto;
+}
+.cm-s-revquest .CodeMirror-gutters { background: var(--bg-soft); border-right: 1px solid var(--border); }
+.cm-s-revquest .CodeMirror-linenumber { color: var(--text-dim); padding: 0 8px 0 4px; }
+.cm-s-revquest .CodeMirror-cursor { border-left: 2px solid var(--primary); }
+.cm-s-revquest .CodeMirror-selected { background: rgba(91,140,255,.22); }
+.cm-s-revquest .CodeMirror-activeline-background { background: rgba(91,140,255,.07); }
+.cm-s-revquest .cm-keyword { color: #c792ea; }
+.cm-s-revquest .cm-def { color: #82aaff; }
+.cm-s-revquest .cm-variable { color: #e6e9ef; }
+.cm-s-revquest .cm-variable-2 { color: #f07178; }
+.cm-s-revquest .cm-property { color: #ffcb6b; }
+.cm-s-revquest .cm-operator { color: #89ddff; }
+.cm-s-revquest .cm-string { color: #c3e88d; }
+.cm-s-revquest .cm-string-2 { color: #c3e88d; }
+.cm-s-revquest .cm-number { color: #f78c6c; }
+.cm-s-revquest .cm-comment { color: #697386; font-style: italic; }
+.cm-s-revquest .cm-atom { color: #f78c6c; }
+.cm-s-revquest .cm-meta { color: #ffcb6b; }
+.cm-s-revquest .cm-builtin { color: #82aaff; }
+.cm-s-revquest .cm-tag { color: #f07178; }
+.cm-s-revquest .cm-attribute { color: #ffcb6b; }
+.cm-s-revquest .cm-type { color: #ffcb6b; }
 .exo-controls .wbtn { flex: 0 0 auto; max-width: none; }
+.exo-run-btn { background: rgba(34,197,94,.15); border-color: var(--good); color: var(--good); font-weight: 800; }
+.exo-output { margin-top: 12px; border-radius: 10px; padding: 12px 14px; }
+.exo-output-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.exo-output-pre { margin: 0; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.exo-output-ok { background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.35); }
+.exo-output-ok .exo-output-label { color: var(--good); }
+.exo-output-err { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.35); }
+.exo-output-err .exo-output-label { color: var(--bad); }
+.exo-output-info { background: rgba(91,140,255,.08); border: 1px solid rgba(91,140,255,.35); }
+.exo-output-info .exo-output-label { color: var(--primary); }
+.exo-output-info p { margin: 0; font-size: 14px; }
+.exo-output-verdict { margin: 10px 0 0; font-size: 14px; font-weight: 600; }
+.exo-output-verdict.ok { color: var(--good); }
+.exo-output-verdict.warn { color: var(--warn); }
 .exo-hint { margin-top: 10px; background: rgba(245,158,11,.1); border-left: 3px solid var(--warn); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
 .exo-sol { margin-top: 12px; }
 .exo-sol-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--good); margin-bottom: 6px; }

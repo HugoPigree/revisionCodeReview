@@ -350,25 +350,244 @@ function stepContentHtml(s) {
   return out;
 }
 
+function exoZone(exo) {
+  return exo.zone ?? exo.mauvais ?? exo.code ?? "";
+}
+
+function exoSolutionText(exo) {
+  if (exo.starter && exo.solutionZone) {
+    const sep = exo.starter.endsWith("\n") ? "" : "\n";
+    return exo.starter + sep + exo.solutionZone;
+  }
+  return exo.solution ?? "";
+}
+
+function registerExoEditorModes() {
+  if (typeof CodeMirror === "undefined" || CodeMirror.modes.typescript) return;
+  CodeMirror.defineMode("typescript", config =>
+    CodeMirror.getMode(config, { name: "javascript", typescript: true })
+  );
+  CodeMirror.defineMIME("text/typescript", "typescript");
+}
+
+function exoEditorMode(text, exo) {
+  if (exo?.runnable === false || /^#/m.test(String(text || "").trim())) return "shell";
+  return "typescript";
+}
+
+function mountExoEditor(textarea, minRows, onRun, exo) {
+  registerExoEditorModes();
+  if (typeof CodeMirror === "undefined") return null;
+  const cm = CodeMirror.fromTextArea(textarea, {
+    mode: exoEditorMode(textarea.value, exo),
+    theme: "revquest",
+    lineNumbers: true,
+    indentUnit: 2,
+    tabSize: 2,
+    indentWithTabs: false,
+    lineWrapping: false,
+    autoCloseBrackets: true,
+    matchBrackets: true,
+    styleActiveLine: true,
+    viewportMargin: Infinity,
+    extraKeys: {
+      Tab: cm => {
+        if (cm.somethingSelected()) cm.indentSelection("add");
+        else cm.replaceSelection("  ", "end");
+      },
+      "Shift-Tab": cm => cm.indentSelection("subtract"),
+      "Ctrl-Enter": () => { if (onRun) onRun(); },
+      "Cmd-Enter": () => { if (onRun) onRun(); },
+    },
+  });
+  cm.setSize("100%", Math.max(168, minRows * 22));
+  requestAnimationFrame(() => cm.refresh());
+  return cm;
+}
+
+function preprocessExoCode(code) {
+  return String(code || "")
+    .split("\n")
+    .filter(line => !/^\s*interface\s+[\w.]+\s*\{/.test(line))
+    .map(line => line.replace(/\s+implements\s+[\w.\s,]+(?=\s*\{|\s*$)/g, ""))
+    .map(line => line.replace(/\b(public|private|protected)\s+/g, ""))
+    .join("\n");
+}
+
+const TS_COMPILER_OPTIONS = {
+  target: typeof ts !== "undefined" ? ts.ScriptTarget.ES2020 : undefined,
+  module: typeof ts !== "undefined" ? ts.ModuleKind.None : undefined,
+  strict: false,
+  removeComments: false,
+};
+
+function compileTypeScript(source) {
+  if (typeof ts === "undefined") {
+    return { ok: true, js: preprocessExoCode(source), fallback: true };
+  }
+  const result = ts.transpileModule(source, {
+    compilerOptions: TS_COMPILER_OPTIONS,
+    reportDiagnostics: true,
+  });
+  const errors = (result.diagnostics || []).filter(d => d.category === ts.DiagnosticCategory.Error);
+  if (errors.length) {
+    const error = errors.map(d => {
+      let loc = "";
+      if (d.file && d.start != null) {
+        const { line, character } = d.file.getLineAndCharacterOfPosition(d.start);
+        loc = ` (ligne ${line + 1}, col ${character + 1})`;
+      }
+      return ts.flattenDiagnosticMessageText(d.messageText, "\n") + loc;
+    }).join("\n");
+    return { ok: false, error, phase: "typescript" };
+  }
+  return { ok: true, js: result.outputText };
+}
+
+function buildRunnableExoCode(exo, userPart) {
+  const parts = [];
+  if (exo.starter) parts.push(exo.starter);
+  parts.push(userPart);
+  if (exo.runTest) parts.push(exo.runTest);
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function compileAndRunExoCode(tsSource) {
+  const compiled = compileTypeScript(tsSource);
+  if (!compiled.ok) return { ok: false, error: compiled.error, phase: "typescript", logs: [] };
+  const result = executeJsCode(compiled.js);
+  if (!result.ok) return { ...result, phase: "runtime" };
+  return result;
+}
+
+function formatRunValue(v) {
+  if (v === undefined) return "undefined";
+  if (typeof v === "object") {
+    try { return JSON.stringify(v); } catch { return String(v); }
+  }
+  return String(v);
+}
+
+function executeJsCode(jsCode) {
+  const logs = [];
+  const fakeConsole = {
+    log: (...args) => logs.push(args.map(formatRunValue).join(" ")),
+    warn: (...args) => logs.push("⚠ " + args.map(formatRunValue).join(" ")),
+    error: (...args) => logs.push("✖ " + args.map(formatRunValue).join(" ")),
+  };
+  try {
+    const fn = new Function("console", jsCode);
+    fn(fakeConsole);
+    return { ok: true, logs };
+  } catch (e) {
+    return { ok: false, error: e.message, logs };
+  }
+}
+
+function exoSolutionUserPart(exo) {
+  return exo.solutionZone ?? exo.solution ?? "";
+}
+
+function isExoRunnable(exo, userCode) {
+  if (exo.runnable === false) return false;
+  const text = String(userCode || exoZone(exo)).trim();
+  return exoEditorMode(text, exo) !== "shell";
+}
+
+function runExoCode(exo, userCode) {
+  if (!isExoRunnable(exo, userCode)) {
+    return { ok: null, message: "Cet exercice est une réponse texte (oral), pas du code exécutable." };
+  }
+  const code = buildRunnableExoCode(exo, userCode);
+  const result = compileAndRunExoCode(code);
+  if (!result.ok) return result;
+
+  const expected = compileAndRunExoCode(buildRunnableExoCode(exo, exoSolutionUserPart(exo)));
+  const match = expected.ok && JSON.stringify(result.logs) === JSON.stringify(expected.logs);
+  return { ...result, match, expectedLogs: expected.logs };
+}
+
+function renderExoOutput(result) {
+  if (result.ok === null) {
+    return `<div class="exo-output exo-output-info"><div class="exo-output-label">ℹ️ Info</div><p>${escapeHtml(result.message)}</p></div>`;
+  }
+  if (!result.ok) {
+    const label = result.phase === "typescript"
+      ? "❌ Erreur TypeScript — corrige la syntaxe ou les types"
+      : "❌ Erreur à l'exécution — le TS compile, mais le code plante au runtime";
+    return `<div class="exo-output exo-output-err">
+      <div class="exo-output-label">${label}</div>
+      <pre class="exo-output-pre">${escapeHtml(result.error)}</pre>
+      ${result.logs.length ? `<pre class="exo-output-pre">${escapeHtml(result.logs.join("\n"))}</pre>` : ""}
+    </div>`;
+  }
+  const logsText = result.logs.length ? result.logs.join("\n") : "(aucune sortie — ajoute des console.log() pour voir un résultat)";
+  const verdict = result.match === true
+    ? `<p class="exo-output-verdict ok">✅ Même résultat que la solution attendue — bravo !</p>`
+    : result.match === false
+      ? `<p class="exo-output-verdict warn">⚠️ Le code s'exécute, mais le résultat diffère de la solution. Compare avec « Voir la bonne version ».</p>`
+      : `<p class="exo-output-verdict ok">✅ Code exécuté sans erreur de syntaxe.</p>`;
+  return `<div class="exo-output exo-output-ok">
+    <div class="exo-output-label">▶ Résultat de l'exécution</div>
+    <pre class="exo-output-pre">${escapeHtml(logsText)}</pre>
+    ${verdict}
+  </div>`;
+}
+
+function renderExoHtml(exo) {
+  const zone = exoZone(exo);
+  const hasStarter = !!(exo.starter && exo.starter.trim());
+  const hasMauvais = !!(exo.mauvais && exo.mauvais.trim());
+  const guideHtml = (exo.guide || []).map((g, i) =>
+    `<li><strong>Étape ${i + 1}.</strong> ${escapeHtml(g)}</li>`
+  ).join("");
+
+  return `
+    <div class="exo">
+      <div class="exo-label">💻 Exercice guidé — TypeScript</div>
+      <p class="exo-enonce">${escapeHtml(exo.enonce)}</p>
+      ${exo.probleme ? `
+        <div class="exo-probleme-wrap">
+          <div class="exo-part-label exo-part-bad">❌ Pourquoi c'est une mauvaise approche</div>
+          <p class="exo-probleme">${escapeHtml(exo.probleme)}</p>
+        </div>` : ""}
+      ${hasMauvais ? `
+        <div class="exo-bad-wrap">
+          <div class="exo-part-label exo-part-bad">❌ Mauvaise façon de faire</div>
+          <pre class="exo-bad"><code>${escapeHtml(exo.mauvais)}</code></pre>
+        </div>` : ""}
+      ${hasStarter ? `
+        <div class="exo-starter-wrap">
+          <div class="exo-part-label">📄 Contexte (déjà correct — ne modifie pas)</div>
+          <pre class="exo-starter"><code>${escapeHtml(exo.starter)}</code></pre>
+        </div>` : ""}
+      <div class="exo-mission">
+        <span class="exo-mission-label">✅ Corrige</span>
+        <p>${escapeHtml(exo.mission || exo.enonce)}</p>
+      </div>
+      <div class="exo-part-label exo-part-edit">✏️ Écris ta correction ci-dessous (part du code incorrect et modifie-le)</div>
+      <div class="exo-editor-wrap">
+        <textarea class="exo-editor" id="exo-editor" spellcheck="false" autocapitalize="off" autocomplete="off">${escapeHtml(zone)}</textarea>
+      </div>
+      <p class="exo-tip">▶ Exécuter compile ton TypeScript puis lance le code · Ctrl+Entrée · Compare avec la solution.</p>
+      <div class="exo-controls">
+        ${isExoRunnable(exo, zone) ? `<button class="wbtn exo-run-btn" id="exo-run">▶ Exécuter</button>` : ""}
+        ${guideHtml ? `<button class="wbtn" id="exo-guide">🧭 Étapes pas à pas</button>` : ""}
+        <button class="wbtn" id="exo-reset">↺ Repartir du code incorrect</button>
+        ${exo.indices.map((_, i) => `<button class="wbtn exo-hint-btn" data-h="${i}">💡 Indice ${i + 1}</button>`).join("")}
+        <button class="wbtn exo-sol-btn">✅ Voir la bonne version</button>
+      </div>
+      <div id="exo-reveal">${guideHtml ? `<div class="exo-guide hidden" id="exo-guide-box"><div class="exo-guide-label">🧭 Étapes pas à pas</div><ol>${guideHtml}</ol></div>` : ""}<div id="exo-output"></div></div>
+    </div>`;
+}
+
 function renderStep(stepId) {
   renderTopbar();
   const all = flatSteps();
   const idx = all.findIndex(s => s.id === stepId);
   const s = all[idx];
 
-  const exoRows = s.exo ? Math.max(4, s.exo.code.split("\n").length + 1) : 0;
-  const exoHtml = s.exo ? `
-    <div class="exo">
-      <div class="exo-label">💻 Exercice guidé — à toi de modifier le code</div>
-      <p class="exo-enonce">${escapeHtml(s.exo.enonce)}</p>
-      <textarea class="exo-editor" id="exo-editor" rows="${exoRows}" spellcheck="false" autocapitalize="off" autocomplete="off">${escapeHtml(s.exo.code)}</textarea>
-      <div class="exo-controls">
-        <button class="wbtn" id="exo-reset">↺ Réinitialiser</button>
-        ${s.exo.indices.map((_, i) => `<button class="wbtn exo-hint-btn" data-h="${i}">💡 Indice ${i + 1}</button>`).join("")}
-        <button class="wbtn exo-sol-btn">✅ Voir la solution</button>
-      </div>
-      <div id="exo-reveal"></div>
-    </div>` : "";
+  const exoHtml = s.exo ? renderExoHtml(s.exo) : "";
 
   view().innerHTML = `
     <div class="quiz-head no-print">
@@ -382,7 +601,7 @@ function renderStep(stepId) {
       ${s.pourquoi ? `<div class="step-why">🎯 ${escapeHtml(s.pourquoi)}</div>` : ""}
       <div class="lesson-body">${stepContentHtml(s)}</div>
       ${s.exemple ? `<div class="ex-line">🔍 Exemple concret : ${escapeHtml(s.exemple)}</div>` : ""}
-      ${codeMemoHtml(stepContentHtml(s) + (s.exo ? "\n" + s.exo.code + "\n" + s.exo.solution : ""))}
+      ${codeMemoHtml(stepContentHtml(s) + (s.exo ? "\n" + exoZone(s.exo) + "\n" + exoSolutionText(s.exo) : ""))}
       ${exoHtml}
       <div class="note-box">
         <span class="note-label">📓 À noter dans ton cahier</span>
@@ -401,24 +620,53 @@ function renderStep(stepId) {
   // exercice guidé : éditeur modifiable + indices + solution
   if (s.exo) {
     const reveal = document.getElementById("exo-reveal");
-    const editor = document.getElementById("exo-editor");
-    // touche Tab = 2 espaces (au lieu de changer de champ)
-    editor.addEventListener("keydown", e => {
-      if (e.key === "Tab") {
-        e.preventDefault();
-        const st = editor.selectionStart, en = editor.selectionEnd;
-        editor.value = editor.value.slice(0, st) + "  " + editor.value.slice(en);
-        editor.selectionStart = editor.selectionEnd = st + 2;
+    const outputEl = document.getElementById("exo-output");
+    const editorEl = document.getElementById("exo-editor");
+    const minRows = Math.max(4, exoZone(s.exo).split("\n").length + 1);
+
+    function getExoUserCode() {
+      return exoCm ? exoCm.getValue() : editorEl.value;
+    }
+
+    function showExoRunResult() {
+      const result = runExoCode(s.exo, getExoUserCode());
+      outputEl.innerHTML = renderExoOutput(result);
+      outputEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    const exoCm = mountExoEditor(editorEl, minRows, showExoRunResult, s.exo);
+
+    const runBtn = document.getElementById("exo-run");
+    if (runBtn) runBtn.addEventListener("click", showExoRunResult);
+
+    document.getElementById("exo-reset").addEventListener("click", () => {
+      const initial = exoZone(s.exo);
+      if (exoCm) {
+        exoCm.setValue(initial);
+        exoCm.setOption("mode", exoEditorMode(initial, s.exo));
+        exoCm.focus();
+      } else {
+        editorEl.value = initial;
+        editorEl.focus();
       }
+      outputEl.innerHTML = "";
     });
-    document.getElementById("exo-reset").addEventListener("click", () => { editor.value = s.exo.code; editor.focus(); });
+    const guideBtn = document.getElementById("exo-guide");
+    if (guideBtn) guideBtn.addEventListener("click", () => {
+      const box = document.getElementById("exo-guide-box");
+      if (box) { box.classList.toggle("hidden"); box.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    });
     view().querySelectorAll(".exo-hint-btn").forEach(b => b.addEventListener("click", () => {
       if (document.getElementById("hint-" + b.dataset.h)) return;
       reveal.insertAdjacentHTML("beforeend", `<div class="exo-hint" id="hint-${b.dataset.h}">💡 ${escapeHtml(s.exo.indices[b.dataset.h])}</div>`);
     }));
     view().querySelector(".exo-sol-btn").addEventListener("click", () => {
       if (document.getElementById("exo-solution")) return;
-      reveal.insertAdjacentHTML("beforeend", `<div class="exo-sol" id="exo-solution"><div class="exo-sol-label">Solution — compare avec ta version au-dessus</div><pre><code>${escapeHtml(s.exo.solution)}</code></pre></div>`);
+      const sol = exoSolutionText(s.exo);
+      const solNote = s.exo.solutionZone
+        ? "✅ Bonne version — compare avec ta correction au-dessus"
+        : "✅ Bonne version — compare avec ta correction au-dessus";
+      reveal.insertAdjacentHTML("beforeend", `<div class="exo-sol" id="exo-solution"><div class="exo-sol-label">${solNote}</div><pre><code>${escapeHtml(sol)}</code></pre></div>`);
       document.getElementById("exo-solution").scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   }

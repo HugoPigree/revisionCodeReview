@@ -12,7 +12,9 @@
      lessons   : [[worldId, index]...]     → plusieurs sections de cours
      glos      : [termes...]              → affiche des entrées du glossaire
      html      : contenu personnalisé (sinon lesson/glos)
-     exo       : exercice guidé { enonce, code, indices:[...], solution }
+     exo       : exercice guidé {
+                   enonce, probleme, mauvais, starter?, zone?, guide?, runTest?, runnable?, indices[], solution, solutionZone?
+                 }
      note      : 📓 phrase à recopier dans le cahier
      checkpoint: [cardIds...] → questions (des vrais tests) à réussir pour valider
    ============================================================ */
@@ -59,22 +61,35 @@ const ROADMAP = [
       pourquoi: "Le premier pilier : protéger l'intérieur d'un objet.",
       lesson: ["fond", 2],
       exo: {
-        enonce: "Voici une classe où le solde est public : n'importe qui peut le modifier directement, même le rendre négatif. Comment protéger cette donnée ?",
-        code: `class CompteBancaire {
-  public solde = 0;   // ⚠️ accessible et modifiable par tous
+        enonce: "Un compte bancaire ne devrait pas laisser n'importe qui modifier le solde librement.",
+        probleme: "Le solde est public : depuis l'extérieur, on peut écrire compte.solde = -9999 sans aucun contrôle. Aucune règle n'est appliquée.",
+        mauvais: `class CompteBancaire {
+  public solde = 0;   // ⚠️ accessible par tous
 }
 
+const compte = new CompteBancaire();
 compte.solde = -9999;  // rien ne l'empêche !`,
+        mission: "Corrige la classe : rends solde privé et ajoute une méthode deposer() qui n'accepte que les montants positifs.",
+        guide: [
+          "Supprime l'accès direct : remplace public solde par private solde.",
+          "Ajoute public deposer(montant) { ... } pour contrôler les dépôts.",
+          "Dans deposer, vérifie if (montant > 0) avant d'ajouter au solde.",
+          "Supprime la ligne compte.solde = -9999 — ce ne sera plus possible."
+        ],
         indices: [
           "Une donnée sensible ne devrait pas être modifiable directement de l'extérieur.",
           "Rends l'attribut « privé », et expose une méthode qui contrôle la modification."
         ],
         solution: `class CompteBancaire {
-  private solde = 0;                 // caché
+  private solde = 0;
   public deposer(montant) {
-    if (montant > 0) this.solde += montant;  // règle contrôlée
+    if (montant > 0) this.solde += montant;
   }
-}`
+}`,
+        runTest: `const compte = new CompteBancaire();
+compte.deposer(100);
+compte.deposer(-50);
+console.log("deposer() OK — montant négatif ignoré");`
       },
       note: "Encapsulation = cacher les détails internes (private) et n'exposer que des méthodes contrôlées.",
       checkpoint: ["fond-06"]
@@ -101,21 +116,29 @@ compte.solde = -9999;  // rien ne l'empêche !`,
         <p>En code, abstraire c'est écrire un programme qui manipule un concept général (ex. <code>Forme</code>) sans dépendre de chaque cas concret (<code>Cercle</code>, <code>Carré</code>).</p>`,
       exemple: "Le mot « moyen de transport » : tu raisonnes dessus sans préciser si c'est un bus ou un vélo.",
       exo: {
-        enonce: "Ce code traite chaque forme avec un if sur son type. C'est rigide : ajouter une forme = modifier ce code. Quelle idée permettrait de raisonner sur « une forme » en général ?",
-        code: `function aire(forme) {
+        enonce: "Cette fonction calcule l'aire en testant le type de chaque forme avec des if.",
+        probleme: "La fonction connaît tous les types concrets (cercle, carré…). Ajouter un triangle = ajouter un if. Le code devient rigide et difficile à maintenir.",
+        mauvais: `function aire(forme) {
   if (forme.type === "cercle") return 3.14 * forme.r * forme.r;
   if (forme.type === "carre")  return forme.cote * forme.cote;
   // ajouter un triangle = encore un if...
 }`,
+        mission: "Corrige la fonction : supprime les if et fais confiance à forme.aire() — chaque forme sait calculer son aire.",
+        guide: [
+          "Supprime les deux if — la fonction ne doit plus connaître les types.",
+          "Remplace tout le corps par une seule ligne : return forme.aire();",
+          "L'idée d'abstraction : on raisonne sur « une forme », pas sur chaque cas."
+        ],
         indices: [
           "Le problème : la fonction connaît tous les types concrets.",
           "On voudrait une notion générale « Forme » qui sait calculer son aire, peu importe laquelle."
         ],
-        solution: `// On abstrait : chaque forme SAIT calculer son aire.
-// La fonction ne raisonne plus que sur l'idée "Forme".
-function aire(forme) {
-  return forme.aire();   // peu importe le type concret
-}`
+        solution: `function aire(forme) {
+  return forme.aire();
+}`,
+        runTest: `const cercle = { aire(){ return 3.14 * 2 * 2; } };
+const carre = { aire(){ return 3 * 3; } };
+console.log("Aires:", aire(cercle), aire(carre));`
       },
       note: "Abstraction = raisonner sur l'idée générale (Forme, Véhicule) sans dépendre des cas concrets.",
       checkpoint: ["fond-13"]
@@ -140,20 +163,41 @@ class Paypal implements MoyenPaiement { payer(m){ /* ... */ } }</code></pre>
         <p>📺 <em>Analogie :</em> une télécommande universelle. Le bouton <strong>ON</strong> allume la TV, la box ou la hi-fi — même geste, comportement adapté à chaque appareil.</p>
         <p>C'est possible parce que tous ces objets partagent une <strong>interface</strong> commune. Le slogan : <strong>« program to interfaces, not implementations »</strong>.</p>`,
       exo: {
-        enonce: "Reprends l'idée de l'abstraction : grâce à une interface Forme commune, écris l'appel qui calcule l'aire de N'IMPORTE quelle forme.",
-        code: `interface Forme { aire(); }
-class Cercle   implements Forme { aire(){ return 3.14*this.r*this.r; } }
-class Carre    implements Forme { aire(){ return this.cote*this.cote; } }
+        enonce: "On veut additionner les aires de plusieurs formes. Voici la mauvaise façon de le faire.",
+        probleme: "Tu testes le type de chaque objet avec des if (instanceof). À chaque nouvelle forme (Triangle, Rectangle…), tu dois rouvrir et modifier cette boucle. C'est l'opposé du polymorphisme.",
+        mauvais: `let total = 0;
+for (const f of formes) {
+  if (f instanceof Cercle) total += 3.14 * f.r * f.r;
+  else if (f instanceof Carre) total += f.cote * f.cote;
+  // ajouter Triangle = encore un else if...
+}`,
+        starter: `interface Forme { aire(); }
+class Cercle {
+  constructor(r) { this.r = r; }
+  aire(){ return 3.14*this.r*this.r; }
+}
+class Carre {
+  constructor(cote) { this.cote = cote; }
+  aire(){ return this.cote*this.cote; }
+}
 
-const formes = [new Cercle(2), new Carre(3)];
-// objectif : additionner toutes les aires`,
+const formes = [new Cercle(2), new Carre(3)];`,
+        mission: "Corrige la boucle : supprime tous les if/else if et appelle simplement f.aire() — le bon calcul s'exécutera tout seul.",
+        guide: [
+          "Garde let total = 0; et la boucle for (const f of formes).",
+          "Supprime les if (f instanceof Cercle) et else if (f instanceof Carre).",
+          "Remplace par : total += f.aire();",
+          "Résultat : 2 lignes utiles — let total = 0; et for... total += f.aire();"
+        ],
         indices: [
           "Chaque forme sait déjà calculer son aire via la même méthode aire().",
           "Tu peux parcourir la liste et appeler aire() sans jamais tester le type."
         ],
+        solutionZone: `let total = 0;
+for (const f of formes) total += f.aire();`,
         solution: `let total = 0;
-for (const f of formes) total += f.aire(); // polymorphisme : le bon aire() s'exécute
-// Ajouter un Triangle ne change PAS ce code → souplesse.`
+for (const f of formes) total += f.aire();`,
+        runTest: `console.log("Total des aires =", total);`
       },
       note: "Polymorphisme = un même appel (ex. aire()) prend plusieurs formes selon l'objet, via une interface commune. Évite les if/switch sur le type.",
       checkpoint: ["fond-09", "fond-14"]
@@ -181,12 +225,20 @@ for (const f of formes) total += f.aire(); // polymorphisme : le bon aire() s'ex
     {
       id: "r2-2", titre: "O — Open/Closed", pourquoi: "S'appuie sur abstraction + polymorphisme (revus au ch.1).", lesson: ["solid", 2],
       exo: {
-        enonce: "Ce code viole l'Open/Closed : ajouter un moyen de paiement oblige à modifier la fonction. Comment l'ouvrir à l'extension sans la modifier ?",
-        code: `function payer(type, montant) {
-  if (type === "carte")  { /* ... */ }
-  else if (type === "paypal") { /* ... */ }
+        enonce: "Cette fonction de paiement doit accepter de nouveaux moyens de paiement sans être modifiée.",
+        probleme: "Chaque nouveau moyen (Apple Pay, virement…) oblige à ajouter un else if dans payer(). La fonction est « fermée » aux extensions — ça viole Open/Closed.",
+        mauvais: `function payer(type, montant) {
+  if (type === "carte")  { /* traitement carte */ }
+  else if (type === "paypal") { /* traitement paypal */ }
   // nouveau moyen = encore un else if ⚠️
 }`,
+        mission: "Corrige : crée une interface MoyenPaiement + des classes Carte/Paypal, puis une fonction payer(moyen, montant) qui appelle moyen.payer() sans if.",
+        guide: [
+          "Crée interface MoyenPaiement { payer(montant); }",
+          "Crée class Carte implements MoyenPaiement { payer(m){ /* ... */ } }",
+          "Crée class Paypal implements MoyenPaiement { payer(m){ /* ... */ } }",
+          "Remplace la fonction par : function payer(moyen, montant) { moyen.payer(montant); }"
+        ],
         indices: [
           "Rappelle-toi l'interface : et si chaque moyen de paiement savait se payer lui-même ?",
           "Crée une interface MoyenPaiement ; chaque moyen = une classe. La fonction appelle juste payer()."
@@ -195,8 +247,8 @@ for (const f of formes) total += f.aire(); // polymorphisme : le bon aire() s'ex
 class Carte  implements MoyenPaiement { payer(m){ /* ... */ } }
 class Paypal implements MoyenPaiement { payer(m){ /* ... */ } }
 
-function payer(moyen, montant) { moyen.payer(montant); }
-// Ajouter ApplePay = créer une classe, SANS toucher à payer().`
+function payer(moyen, montant) { moyen.payer(montant); }`,
+        runTest: `payer({ payer(m){ console.log("Payé:", m); } }, 42);`
       },
       note: "O : on ajoute du comportement par de NOUVELLES classes, sans modifier le code existant (souvent via interface + polymorphisme).",
       checkpoint: ["solid-03", "solid-04"] },
@@ -207,23 +259,32 @@ function payer(moyen, montant) { moyen.payer(montant); }
     {
       id: "r2-5", titre: "D — Dependency Inversion", pourquoi: "Le pont vers la Clean Architecture (injection de dépendance).", lesson: ["solid", 5],
       exo: {
-        enonce: "Ce service crée lui-même sa base de données (dépendance concrète). Comment inverser cette dépendance ?",
-        code: `class ServiceCommande {
+        enonce: "Ce service crée lui-même sa connexion à la base de données.",
+        probleme: "ServiceCommande fait new MySQLDatabase() en dur : il dépend du concret. Impossible de le tester avec un faux repo, impossible de changer de BDD sans modifier la classe.",
+        mauvais: `class ServiceCommande {
   constructor() {
-    this.db = new MySQLDatabase(); // ⚠️ dépend du concret
+    this.db = new MySQLDatabase(); // ⚠️ dépendance concrète en dur
   }
 }`,
+        mission: "Corrige le constructor : reçois un repo injecté de l'extérieur au lieu de créer MySQLDatabase toi-même.",
+        guide: [
+          "Supprime new MySQLDatabase() du constructor.",
+          "Ajoute un paramètre : constructor(repo)",
+          "Stocke-le : this.repo = repo;",
+          "Le service ne sait plus QUELLE base est utilisée — c'est injecté de l'extérieur (principe D)."
+        ],
         indices: [
           "Le service ne devrait pas savoir QUELLE base précise il utilise.",
           "Fais-lui dépendre d'une interface (Repository) qu'on lui INJECTE de l'extérieur."
         ],
-        solution: `// Le service dépend d'une abstraction, fournie de l'extérieur :
-class ServiceCommande {
-  constructor(repo /* : CommandeRepository */) {
-    this.repo = repo;   // injection de dépendance
+        solution: `class ServiceCommande {
+  constructor(repo) {
+    this.repo = repo;
   }
-}
-// En test, on injecte un faux repo (mock). En prod, le vrai. Découplé !`
+}`,
+        runTest: `const repo = { save(d){ console.log("Repo mock OK"); } };
+new ServiceCommande(repo);
+console.log("Injection OK");`
       },
       note: "D : dépendre d'abstractions (interfaces injectées), jamais d'implémentations concrètes. Base de l'injection de dépendance.",
       checkpoint: ["solid-09", "solid-10", "solid-12"] },
@@ -236,13 +297,23 @@ class ServiceCommande {
     {
       id: "r3-1", titre: "Strategy", pourquoi: "Application directe de composition + interface + Open/Closed.", lesson: ["patterns", 1],
       exo: {
-        enonce: "Une commande calcule les frais de port avec un gros if. On veut pouvoir changer la méthode de calcul facilement. Quel pattern, et comment ?",
-        code: `class Commande {
+        enonce: "Cette commande calcule les frais de port avec des if sur le mode de livraison.",
+        probleme: "Chaque nouveau mode (express, point relais…) = un if de plus dans fraisPort(). On ne peut pas changer la stratégie de calcul facilement au runtime.",
+        mauvais: `class Commande {
   fraisPort(mode) {
     if (mode === "standard") return 5;
     if (mode === "express")  return 12;
+    // nouveau mode = encore un if...
   }
 }`,
+        mission: "Corrige avec le pattern Strategy : interface Livraison, classes Standard/Express, et injection dans Commande.",
+        guide: [
+          "Crée interface Livraison { cout(); }",
+          "Crée class Standard implements Livraison { cout(){ return 5; } }",
+          "Crée class Express implements Livraison { cout(){ return 12; } }",
+          "Commande reçoit la stratégie : constructor(livraison) { this.livraison = livraison; }",
+          "fraisPort() devient : return this.livraison.cout(); — plus aucun if !"
+        ],
         indices: [
           "Chaque mode de livraison = une « stratégie » de calcul interchangeable.",
           "Définis une interface Livraison { cout() } ; injecte la stratégie dans la commande."
@@ -252,10 +323,10 @@ class Standard implements Livraison { cout(){ return 5; } }
 class Express  implements Livraison { cout(){ return 12; } }
 
 class Commande {
-  constructor(livraison) { this.livraison = livraison; } // composition
+  constructor(livraison) { this.livraison = livraison; }
   fraisPort() { return this.livraison.cout(); }
-}
-// On change de stratégie au runtime : commande.livraison = new Express();`
+}`,
+        runTest: `console.log("Frais express:", new Commande(new Express()).fraisPort());`
       },
       note: "Strategy : déléguer un algorithme interchangeable à des classes d'une même interface (composition).",
       checkpoint: ["pat-04", "pat-11"] },
@@ -282,26 +353,33 @@ class Commande {
     {
       id: "r4-4", titre: "Repository & injection de dépendance", pourquoi: "L'application concrète du D : appeler la BD proprement.", lesson: ["clean", 4],
       exo: {
-        enonce: "Un Use Case appelle directement MySQL → il dépend de la technique (interdit). Comment respecter la règle de dépendance ?",
-        code: `class CreerUtilisateur {       // couche interne (Use Case)
+        enonce: "Ce Use Case appelle MySQL directement depuis la couche métier.",
+        probleme: "CreerUtilisateur fait new MySQL() : la couche interne (métier) dépend de la technique (BDD). En Clean Archi, c'est interdit — la règle de dépendance est violée.",
+        mauvais: `class CreerUtilisateur {
   execute(data) {
-    const db = new MySQL();     // ⚠️ dépend du concret externe
+    const db = new MySQL();     // ⚠️ couche interne → technique
     db.insert(data);
   }
 }`,
+        mission: "Corrige : définis une interface UserRepository, injecte-la au constructor, et appelle this.repo.save(data).",
+        guide: [
+          "Crée interface UserRepository { save(data); } (définie par la couche interne).",
+          "Ajoute constructor(repo) { this.repo = repo; }",
+          "Dans execute : remplace new MySQL() par this.repo.save(data);",
+          "L'implémentation MySQL sera dans une classe externe qui implements UserRepository."
+        ],
         indices: [
           "La couche interne doit DÉFINIR le contrat, la couche externe l'IMPLÉMENTE.",
           "Crée une interface UserRepository (interne) ; injecte une implémentation MySQL (externe)."
         ],
-        solution: `// Interne : le Use Case dépend d'une interface qu'il définit
-interface UserRepository { save(data); }
+        solution: `interface UserRepository { save(data); }
 class CreerUtilisateur {
-  constructor(repo /* : UserRepository */) { this.repo = repo; }
+  constructor(repo) { this.repo = repo; }
   execute(data) { this.repo.save(data); }
 }
-// Externe : implémente le contrat
-class MySQLUserRepository implements UserRepository { save(d){ /* SQL */ } }
-// La dépendance est INVERSÉE : l'externe dépend de l'interne.`
+class MySQLUserRepository implements UserRepository { save(d){ /* SQL */ } }`,
+        runTest: `const repo = { save(d){ console.log("SQL OK"); } };
+new CreerUtilisateur(repo).execute({ name: "Hugo" });`
       },
       note: "Repository : la couche interne définit l'interface, l'externe l'implémente, on injecte → dépendance inversée + testable.",
       checkpoint: ["clean-06"] },
@@ -321,20 +399,28 @@ class MySQLUserRepository implements UserRepository { save(d){ /* SQL */ } }
       note: "Vocabulaire exact + posture ouverte + fil rouge couplage faible → interfaces → DIP → Repository → testabilité.", checkpoint: ["boss-04", "boss-07", "boss-08", "boss-10"] },
     { id: "r5-5", titre: "Maîtriser TON code (simulation oral)", pourquoi: "L'évaluateur navigue dans TON projet : tu dois t'y retrouver instantanément.", lesson: ["boss", 6],
       exo: {
-        enonce: "Entraîne-toi mentalement (ou sur ton projet flipper) : l'évaluateur te demande « Montre-moi où tu gères la connexion utilisateur ». Écris le chemin du fichier et la fonction clé — comme à l'oral.",
-        code: `# Exemple de réponse structurée (adapte à TON projet) :
-# Fichier : src/auth/LoginController.php
-# Fonction : login(string $email, string $password): bool
-# Rôle : valide les identifiants via UserRepository (injection de dépendance)
-# Test associé : tests/Auth/LoginControllerTest.php`,
+        enonce: "À l'oral, l'évaluateur te demande où se trouve une fonctionnalité dans ton projet.",
+        probleme: "Répondre « euh… c'est dans src quelque part » sans fichier précis, sans nom de fonction, sans principe utilisé = mauvaise note à l'oral.",
+        mauvais: `# Mauvaise réponse à l'oral :
+# « Euh… la connexion c'est dans src, je crois…
+#  ou peut-être dans un controller… je sais plus trop. »`,
+        mission: "Corrige : écris une réponse structurée pour TON projet (fichier exact, fonction, rôle, test).",
+        guide: [
+          "Ligne 1 — Fichier : chemin exact (ex. src/auth/LoginController.php).",
+          "Ligne 2 — Fonction : nom + signature (ex. login(email, password)).",
+          "Ligne 3 — Rôle : ce qu'elle fait + principe (Repository, injection, MVC…).",
+          "Ligne 4 — Test : fichier de test que tu relancerais devant l'évaluateur."
+        ],
         indices: [
           "Commence par le fichier, pas par « euh… c'est quelque part dans src ».",
           "Nomme le pattern ou principe utilisé (Repository, MVC, injection…)."
         ],
-        solution: `# Bonne réponse type à l'oral :
-# « La connexion est dans LoginController (couche Adapter).
-#  Il appelle UserRepository (interface injectée) — principe D de SOLID.
-#  Je peux lancer phpunit tests/Auth/LoginControllerTest.php pour prouver que ça marche. »`
+        solution: `# Bonne réponse à l'oral :
+# Fichier : src/auth/LoginController.php
+# Fonction : login(string $email, string $password): bool
+# Rôle : valide via UserRepository (injection de dépendance — principe D)
+# Test : phpunit tests/Auth/LoginControllerTest.php`,
+        runnable: false
       },
       note: "Check-list finale : justifier chaque choix · savoir OÙ est chaque feature · montrer/relancer les tests · débugger en 4 temps · vocabulaire précis.",
       checkpoint: ["boss-01", "boss-05"] },
